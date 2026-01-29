@@ -47,6 +47,14 @@ let strokes: Point[][] = []
 let current: Point[] | null = null
 let ink = inkColors[0]!
 
+type DragonMood = 'idle' | 'happy' | 'oops'
+let dragonMood: DragonMood = 'idle'
+let dragonMoodUntil = 0
+let animUntil = 0
+
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string }
+let particles: Particle[] = []
+
 const spells = [
   { id: 'circle', label: 'circle', total: 6 },
   { id: 'line', label: 'line', total: 6 },
@@ -62,7 +70,30 @@ let successes = 0
 function setToast(text: string) {
   toastEl.textContent = text
   toastEl.classList.add('show')
-  window.setTimeout(() => toastEl.classList.remove('show'), 1200)
+  window.setTimeout(() => toastEl.classList.remove('show'), 1400)
+}
+
+function setDragonMood(mood: DragonMood, ms = 900) {
+  dragonMood = mood
+  dragonMoodUntil = performance.now() + ms
+  animUntil = Math.max(animUntil, dragonMoodUntil)
+}
+
+function spawnBurst(x: number, y: number) {
+  const colors = ['#ff4d6d', '#f9c74f', '#4cc9f0', '#b517ff', '#90be6d']
+  for (let i = 0; i < 42; i++) {
+    const a = (i / 42) * Math.PI * 2
+    const s = 60 + Math.random() * 220
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s - 40,
+      life: 650 + Math.random() * 300,
+      color: colors[i % colors.length]!,
+    })
+  }
+  animUntil = Math.max(animUntil, performance.now() + 1000)
 }
 
 function setSpell(i: number) {
@@ -123,7 +154,156 @@ function drawStroke(points: Point[], color: string) {
   ctx.stroke()
 }
 
-function render() {
+function drawParticles(dtMs: number) {
+  const rect = canvas.getBoundingClientRect()
+  const w = rect.width
+  const h = rect.height
+  const gravity = 520
+
+  for (const p of particles) {
+    p.life -= dtMs
+    p.vy += gravity * (dtMs / 1000)
+    p.x += p.vx * (dtMs / 1000)
+    p.y += p.vy * (dtMs / 1000)
+  }
+  particles = particles.filter((p) => p.life > 0 && p.x > -50 && p.x < w + 50 && p.y > -50 && p.y < h + 50)
+
+  for (const p of particles) {
+    const a = Math.max(0, Math.min(1, p.life / 900))
+    ctx.fillStyle = `rgba(${hexToRgb(p.color)},${a})`
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+function hexToRgb(hex: string) {
+  const h = hex.replace('#', '')
+  const n = parseInt(h, 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  return `${r},${g},${b}`
+}
+
+function drawDragon(now: number) {
+  const rect = canvas.getBoundingClientRect()
+  const h = rect.height
+
+  const baseX = 110
+  const baseY = h - 120
+
+  const mood = now < dragonMoodUntil ? dragonMood : 'idle'
+  const t = now / 1000
+
+  let bob = Math.sin(t * 4) * 4
+  let shake = 0
+  if (mood === 'happy') bob += Math.sin(t * 10) * 6
+  if (mood === 'oops') shake = Math.sin(t * 18) * 6
+
+  const x = baseX + shake
+  const y = baseY + bob
+
+  // body
+  ctx.save()
+  ctx.translate(x, y)
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  ctx.beginPath()
+  ctx.ellipse(0, 52, 58, 14, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // tail
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'
+  ctx.lineWidth = 10
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(-40, 15)
+  ctx.quadraticCurveTo(-85, 25, -92, 0)
+  ctx.quadraticCurveTo(-98, -22, -70, -28)
+  ctx.stroke()
+
+  // body blob
+  ctx.fillStyle = '#5fe37a'
+  ctx.beginPath()
+  ctx.ellipse(0, 5, 62, 48, 0.1, 0, Math.PI * 2)
+  ctx.fill()
+
+  // belly
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'
+  ctx.beginPath()
+  ctx.ellipse(10, 18, 32, 24, 0.1, 0, Math.PI * 2)
+  ctx.fill()
+
+  // head
+  ctx.fillStyle = '#5fe37a'
+  ctx.beginPath()
+  ctx.ellipse(38, -25, 38, 32, -0.1, 0, Math.PI * 2)
+  ctx.fill()
+
+  // horn
+  ctx.fillStyle = '#f9c74f'
+  ctx.beginPath()
+  ctx.moveTo(52, -55)
+  ctx.lineTo(66, -72)
+  ctx.lineTo(70, -48)
+  ctx.closePath()
+  ctx.fill()
+
+  // eye
+  ctx.fillStyle = '#0b1026'
+  ctx.beginPath()
+  ctx.arc(52, -30, 6, 0, Math.PI * 2)
+  ctx.fill()
+  if (mood === 'happy') {
+    ctx.strokeStyle = '#0b1026'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.arc(52, -26, 10, 0.15 * Math.PI, 0.85 * Math.PI)
+    ctx.stroke()
+  }
+
+  // mouth
+  ctx.strokeStyle = '#0b1026'
+  ctx.lineWidth = 4
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  if (mood === 'oops') {
+    ctx.arc(60, -12, 8, 0, Math.PI * 2)
+  } else {
+    ctx.arc(62, -12, 12, 0.15 * Math.PI, 0.85 * Math.PI)
+  }
+  ctx.stroke()
+
+  // little wing
+  ctx.fillStyle = '#4cc9f0'
+  ctx.beginPath()
+  ctx.moveTo(0, -10)
+  ctx.quadraticCurveTo(-20, -45, -46, -18)
+  ctx.quadraticCurveTo(-24, -12, 0, -10)
+  ctx.fill()
+
+  // sparkles for happy
+  if (mood === 'happy') {
+    ctx.fillStyle = 'rgba(255,255,255,0.65)'
+    for (let i = 0; i < 6; i++) {
+      const sx = 72 + Math.cos(t * 6 + i) * 18
+      const sy = -46 + Math.sin(t * 6 + i) * 12
+      ctx.fillRect(sx, sy, 3, 3)
+    }
+  }
+
+  ctx.restore()
+
+  // label
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  ctx.font = '700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial'
+  ctx.fillText('Piper\'s Dragon', 16, h - 14)
+}
+
+function render(dtMs = 16) {
+  const now = performance.now()
   drawBackground()
   for (let i = 0; i < strokes.length; i++) drawStroke(strokes[i]!, ink)
   if (current) drawStroke(current, ink)
@@ -135,6 +315,9 @@ function render() {
   ctx.beginPath()
   ctx.arc(rect.width / 2, rect.height / 2, Math.min(rect.width, rect.height) * 0.28, 0, Math.PI * 2)
   ctx.stroke()
+
+  drawDragon(now)
+  if (particles.length) drawParticles(dtMs)
 }
 
 function canvasPointFromEvent(e: PointerEvent): Point {
@@ -148,6 +331,7 @@ function canvasPointFromEvent(e: PointerEvent): Point {
 
 function startStroke(p: Point) {
   current = [p]
+  animUntil = Math.max(animUntil, performance.now() + 200)
   render()
 }
 
@@ -158,6 +342,7 @@ function extendStroke(p: Point) {
   const dy = p.y - last.y
   if (dx * dx + dy * dy < 1.5) return
   current.push(p)
+  animUntil = Math.max(animUntil, performance.now() + 200)
   render()
 }
 
@@ -165,6 +350,7 @@ function endStroke() {
   if (!current) return
   if (current.length > 2) strokes.push(current)
   current = null
+  animUntil = Math.max(animUntil, performance.now() + 250)
   render()
 }
 
@@ -296,8 +482,15 @@ function cast() {
   const d = detect(points)
   const target = spells[spellIndex]!.id
 
+  const rect = canvas.getBoundingClientRect()
+  const cx = rect.width / 2
+  const cy = rect.height / 2
+
   if (d.guess === target) {
     setToast('✨ Spell cast!')
+    setDragonMood('happy', 1100)
+    spawnBurst(cx, cy)
+
     successes++
     progressEl.textContent = `${successes} / ${spells.length} spells`
     strokes = []
@@ -312,6 +505,7 @@ function cast() {
 
     setSpell((spellIndex + 1) % spells.length)
   } else {
+    setDragonMood('oops', 1000)
     const guessText = d.guess ? `I thought it was “${d.guess}”. ` : ''
     setToast(guessText + helpMessage(target, d))
   }
@@ -343,5 +537,17 @@ castBtn.addEventListener('click', () => cast())
 
 window.addEventListener('resize', resize)
 
+let lastFrame = performance.now()
+function frame(now: number) {
+  const dt = Math.min(40, now - lastFrame)
+  lastFrame = now
+
+  if (now < animUntil || particles.length) {
+    render(dt)
+  }
+  requestAnimationFrame(frame)
+}
+
 setSpell(0)
 resize()
+requestAnimationFrame(frame)
