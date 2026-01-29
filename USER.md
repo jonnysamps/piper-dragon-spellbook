@@ -6,7 +6,7 @@
 - **What to call them:** Jonathan
 - **Pronouns:** *(optional)*
 - **Timezone:** America/Los_Angeles
-- **Notes:** 
+- **Notes:** CTO of Revyse (revyse.com). Software engineer; interested in using Buddy to automate application enhancements.
 
 ## Context
 
