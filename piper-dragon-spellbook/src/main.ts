@@ -218,12 +218,24 @@ function turningCount(points: Point[]) {
   return turns
 }
 
-function detect(points: Point[]): (typeof spells)[number]['id'] | null {
-  if (points.length < 12) return null
+type Detection = {
+  guess: (typeof spells)[number]['id'] | null
+  reason:
+    | 'too_few_points'
+    | 'too_small'
+    | 'not_closed'
+    | 'too_straight'
+    | 'too_curvy'
+    | 'unknown'
+    | 'ok'
+}
+
+function detect(points: Point[]): Detection {
+  if (points.length < 12) return { guess: null, reason: 'too_few_points' }
 
   const b = bbox(points)
   const area = b.w * b.h
-  if (area < 80 * 80) return null // too small
+  if (area < 80 * 80) return { guess: null, reason: 'too_small' }
 
   const len = pathLength(points)
   const closed = isClosed(points)
@@ -231,56 +243,77 @@ function detect(points: Point[]): (typeof spells)[number]['id'] | null {
   const turns = turningCount(points)
 
   // line: long and not many turns
-  if (!closed && len > 400 && turns < 10) return 'line'
+  if (!closed && len > 400 && turns < 10) return { guess: 'line', reason: 'ok' }
 
   // zigzag: many turns, not closed
-  if (!closed && turns >= 18) return 'zigzag'
-
-  // triangle: closed-ish + moderate turns + roughly bounded
-  if (closed && turns >= 10 && turns <= 30) {
-    // if it is very round, treat as circle
-    const roundish = Math.abs(1 - aspect) < 0.35 && turns > 18
-    if (roundish) return 'circle'
-    return 'triangle'
-  }
+  if (!closed && turns >= 18) return { guess: 'zigzag', reason: 'ok' }
 
   // circle: closed and fairly round
-  if (closed && Math.abs(1 - aspect) < 0.35 && turns > 18) return 'circle'
+  if (closed && Math.abs(1 - aspect) < 0.35 && turns > 18) return { guess: 'circle', reason: 'ok' }
+
+  // triangle: closed-ish + moderate turns
+  if (closed && turns >= 10 && turns <= 30) return { guess: 'triangle', reason: 'ok' }
 
   // C curve: open, curved, not too many turns
   if (!closed && turns >= 10 && turns <= 22) {
-    // crude: if start and end are on the same side-ish (vertical alignment)
     const a = points[0]!, z = points[points.length - 1]!
-    if (Math.abs(a.y - z.y) > 40 && Math.abs(a.x - z.x) < b.w * 0.5) return 'c-curve'
+    if (Math.abs(a.y - z.y) > 40 && Math.abs(a.x - z.x) < b.w * 0.5) return { guess: 'c-curve', reason: 'ok' }
   }
 
   // S curve: open, curvy with more turns
-  if (!closed && turns >= 16 && turns <= 32) return 's-curve'
+  if (!closed && turns >= 16 && turns <= 32) return { guess: 's-curve', reason: 'ok' }
 
-  return null
+  if (!closed && turns < 10) return { guess: null, reason: 'too_straight' }
+  if (!closed && turns > 30) return { guess: null, reason: 'too_curvy' }
+  if (!closed) return { guess: null, reason: 'not_closed' }
+
+  return { guess: null, reason: 'unknown' }
+}
+
+function helpMessage(target: (typeof spells)[number]['id'], d: Detection): string {
+  if (d.reason === 'too_small' || d.reason === 'too_few_points') return 'Try drawing it BIGGER 🙂'
+
+  switch (target) {
+    case 'circle':
+      return d.reason === 'not_closed' ? 'Try connecting the ends to make a circle!' : 'Try a round shape (like a big O).'
+    case 'triangle':
+      return d.reason === 'not_closed'
+        ? 'Try closing the triangle (make the last line touch the first).'
+        : 'Try 3 straight sides with pointy corners.'
+    case 'line':
+      return 'Try one long straight line across the screen.'
+    case 'zigzag':
+      return 'Try sharp corners: \/\/\/ like a lightning bolt!'
+    case 'c-curve':
+      return 'Try a big letter C (open on one side).'
+    case 's-curve':
+      return 'Try a big squiggly S (two curves).'
+  }
 }
 
 function cast() {
-  const points = flatten(strokes)
-  const guess = detect(points)
+  const points = flatten(current ? [...strokes, current] : strokes)
+  const d = detect(points)
   const target = spells[spellIndex]!.id
 
-  if (guess === target) {
+  if (d.guess === target) {
     setToast('✨ Spell cast!')
     successes++
     progressEl.textContent = `${successes} / ${spells.length} spells`
-    // next
     strokes = []
     current = null
+
     if (successes >= spells.length) {
       setToast('🐲 You completed the spellbook!')
       successes = 0
       setSpell(0)
       return
     }
+
     setSpell((spellIndex + 1) % spells.length)
   } else {
-    setToast(guess ? `Not quite — I saw “${guess}”` : `Hmm… try bigger!`)
+    const guessText = d.guess ? `I thought it was “${d.guess}”. ` : ''
+    setToast(guessText + helpMessage(target, d))
   }
 }
 
