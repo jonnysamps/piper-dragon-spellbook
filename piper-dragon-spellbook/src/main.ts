@@ -380,12 +380,35 @@ function pathLength(points: Point[]) {
   return len
 }
 
-function isClosed(points: Point[], threshold = 0.18) {
+function isClosed(points: Point[], threshold = 0.32) {
+  // Threshold is intentionally forgiving for touch input.
   const b = bbox(points)
   const diag = Math.hypot(b.w, b.h) || 1
   const a = points[0]!
   const z = points[points.length - 1]!
   return Math.hypot(a.x - z.x, a.y - z.y) / diag < threshold
+}
+
+function centroid(points: Point[]) {
+  let x = 0
+  let y = 0
+  for (const p of points) {
+    x += p.x
+    y += p.y
+  }
+  const n = Math.max(1, points.length)
+  return { x: x / n, y: y / n }
+}
+
+function circularity(points: Point[]) {
+  // 0 = perfect circle, higher = less circle-ish
+  const c = centroid(points)
+  const rs: number[] = []
+  for (const p of points) rs.push(Math.hypot(p.x - c.x, p.y - c.y))
+  const mean = rs.reduce((a, b) => a + b, 0) / Math.max(1, rs.length)
+  const variance = rs.reduce((a, r) => a + (r - mean) * (r - mean), 0) / Math.max(1, rs.length)
+  const std = Math.sqrt(variance)
+  return { meanR: mean, stdR: std, ratio: std / Math.max(1, mean) }
 }
 
 function turningCount(points: Point[]) {
@@ -434,11 +457,16 @@ function detect(points: Point[]): Detection {
   // zigzag: many turns, not closed
   if (!closed && turns >= 18) return { guess: 'zigzag', reason: 'ok' }
 
-  // circle: closed and fairly round
-  if (closed && Math.abs(1 - aspect) < 0.35 && turns > 18) return { guess: 'circle', reason: 'ok' }
+  // circle: closed-ish and round-ish.
+  // Heuristic: near-square bbox + low radius variance OR lots of turns.
+  const circ = circularity(points)
+  const roundBbox = Math.abs(1 - aspect) < 0.55
+  const roundR = circ.ratio < 0.55
+  const circleLike = closed && (roundBbox && (roundR || turns > 14))
+  if (circleLike) return { guess: 'circle', reason: 'ok' }
 
-  // triangle: closed-ish + moderate turns
-  if (closed && turns >= 10 && turns <= 30) return { guess: 'triangle', reason: 'ok' }
+  // triangle: closed-ish + corners (fewer turns than circle)
+  if (closed && turns >= 8 && turns <= 24) return { guess: 'triangle', reason: 'ok' }
 
   // C curve: open, curved, not too many turns
   if (!closed && turns >= 10 && turns <= 22) {
