@@ -584,7 +584,8 @@ function detect(points: Point[], strokeCount: number): Detection {
   if (area < 80 * 80) return { guess: null, reason: 'too_small' }
 
   const len = pathLength(points)
-  const closed = isClosed(points)
+  // Be extra forgiving about "closing" when there are multiple strokes (kids lift finger a lot).
+  const closed = isClosed(points, strokeCount >= 2 ? 0.45 : 0.32)
   const aspect = b.w / (b.h || 1)
   const turns = turningCount(points)
 
@@ -605,8 +606,11 @@ function detect(points: Point[], strokeCount: number): Detection {
   const circleLike = closed && (roundBbox && (roundR || turns > 14))
   if (circleLike) return { guess: 'circle', reason: 'ok' }
 
-  // triangle: closed-ish + corners (fewer turns than circle)
-  if (closed && turns >= 8 && turns <= 24) return { guess: 'triangle', reason: 'ok' }
+  // triangle: VERY forgiving.
+  // If it's closed-ish and not circle-like, accept a wide range of corner counts.
+  // (Touch triangles often look like wonky pyramids.)
+  const triangleLike = closed && !circleLike && turns >= 6 && turns <= 40
+  if (triangleLike) return { guess: 'triangle', reason: 'ok' }
 
   // C curve: open, curved, not too many turns
   if (!closed && turns >= 10 && turns <= 22) {
