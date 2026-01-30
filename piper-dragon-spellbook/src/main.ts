@@ -784,7 +784,26 @@ function cast() {
       (closedish && !isCircleLike(points, strokeCount))
     )
 
-  if (d.guess === target || triangleAutoPass) {
+  // Super-forgiving C mode: basically any big open arc that isn't a line/zigzag.
+  // (Kids often draw C like "(" or a wide swoop.)
+  const b1 = b0
+  const aspect1 = b1.w / (b1.h || 1)
+  const turns1 = turningCount(points)
+  const len1 = pathLength(points)
+  const openish = !isClosed(points, strokeCount >= 2 ? 0.95 : 0.85)
+  const notLine = !(len1 > 400 && turns1 < 10)
+  const notZigzag = !(len1 > 260 && (turns1 >= 12 || (strokeCount >= 2 && turns1 >= 9)))
+  const cAutoPass =
+    target === 'c-curve' &&
+    bigEnough &&
+    openish &&
+    notLine &&
+    notZigzag &&
+    turns1 >= 5 &&
+    turns1 <= 60 &&
+    (aspect1 > 0.45 && aspect1 < 2.2)
+
+  if (d.guess === target || triangleAutoPass || cAutoPass) {
     setToast('✨ Spell cast!')
     setDragonMood('happy', 1100)
     damageEnemy()
