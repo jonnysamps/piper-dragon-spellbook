@@ -694,14 +694,27 @@ function detect(points: Point[], strokeCount: number): Detection {
   const triangleLike = closed && !circleLike && turns >= 6 && turns <= 40
   if (triangleLike) return { guess: 'triangle', reason: 'ok' }
 
-  // C curve: open, curved, not too many turns
-  if (!closed && turns >= 10 && turns <= 22) {
+  // C curve: open arc. Very forgiving: kids draw it in different orientations.
+  if (!closed) {
     const a = points[0]!, z = points[points.length - 1]!
-    if (Math.abs(a.y - z.y) > 40 && Math.abs(a.x - z.x) < b.w * 0.5) return { guess: 'c-curve', reason: 'ok' }
+    const dx = Math.abs(a.x - z.x)
+    const dy = Math.abs(a.y - z.y)
+    const circ2 = circularity(points)
+
+    const arcLike = len > 220 && turns >= 8 && turns <= 30 && circ2.ratio < 0.85
+
+    // Typical C: start/end roughly aligned in x (vertical C) OR aligned in y (horizontal C)
+    const verticalC = dy > 35 && dx < b.w * 0.75
+    const horizontalC = dx > 35 && dy < b.h * 0.75
+
+    // If multiple strokes, be extra permissive
+    const multiStrokeC = strokeCount >= 2 && len > 180 && turns >= 6 && circ2.ratio < 0.95
+
+    if ((arcLike && (verticalC || horizontalC)) || multiStrokeC) return { guess: 'c-curve', reason: 'ok' }
   }
 
   // S curve: open, curvy with more turns
-  if (!closed && turns >= 16 && turns <= 32) return { guess: 's-curve', reason: 'ok' }
+  if (!closed && turns >= 14 && turns <= 40) return { guess: 's-curve', reason: 'ok' }
 
   if (!closed && turns < 10) return { guess: null, reason: 'too_straight' }
   if (!closed && turns > 30) return { guess: null, reason: 'too_curvy' }
