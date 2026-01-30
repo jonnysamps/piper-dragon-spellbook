@@ -791,24 +791,16 @@ function cast() {
   // Basically: if it's not a straight line and not a zigzag, it's a C.
   // We keep only very light "anti-false-positive" checks.
   const b1 = b0
-  const aspect1 = b1.w / (b1.h || 1)
   const turns1 = turningCount(points)
   const len1 = pathLength(points)
 
-  const notLine = !(len1 > 240 && turns1 < 6)
   const notZigzag = !(len1 > 220 && (turns1 >= 14 || (strokeCount >= 2 && turns1 >= 10)))
 
   // Relax size/point constraints specifically for C.
-  const cBigEnough = points.length >= 6 && b1.w * b1.h >= 40 * 40
+  const cBigEnough = points.length >= 4 && b1.w * b1.h >= 30 * 30
 
-  const cAutoPass =
-    target === 'c-curve' &&
-    cBigEnough &&
-    notLine &&
-    notZigzag &&
-    turns1 >= 2 &&
-    turns1 <= 120 &&
-    (aspect1 > 0.25 && aspect1 < 3.4)
+  // In kid mode, C should basically always pass if it's not clearly a zigzag.
+  const cAutoPass = target === 'c-curve' && cBigEnough && notZigzag
 
   if (d.guess === target || triangleAutoPass || cAutoPass) {
     setToast('✨ Spell cast!')
