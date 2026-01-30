@@ -24,6 +24,7 @@ app.innerHTML = `
     <footer class="bottombar">
       <div class="hint" id="hint">Tip: use one finger. Big shapes work best.</div>
       <div class="progress" id="progress">0 / 6 spells</div>
+      <label class="debugToggle"><input id="debug" type="checkbox" /> debug</label>
     </footer>
   </div>
 `
@@ -34,6 +35,8 @@ const ctx = canvas.getContext('2d', { alpha: false })!
 const toastEl = document.querySelector<HTMLDivElement>('#toast')!
 const promptEl = document.querySelector<HTMLDivElement>('#prompt')!
 const progressEl = document.querySelector<HTMLDivElement>('#progress')!
+const debugEl = document.querySelector<HTMLInputElement>('#debug')!
+let debug = false
 
 const undoBtn = document.querySelector<HTMLButtonElement>('#undo')!
 const clearBtn = document.querySelector<HTMLButtonElement>('#clear')!
@@ -784,23 +787,28 @@ function cast() {
       (closedish && !isCircleLike(points, strokeCount))
     )
 
-  // Super-forgiving C mode: basically any big open arc that isn't a line/zigzag.
-  // (Kids often draw C like "(" or a wide swoop.)
+  // Super-forgiving C mode (Arc + touch-friendly):
+  // Basically: if it's not a straight line and not a zigzag, it's a C.
+  // We keep only very light "anti-false-positive" checks.
   const b1 = b0
   const aspect1 = b1.w / (b1.h || 1)
   const turns1 = turningCount(points)
   const len1 = pathLength(points)
-  // Note: Some kids naturally "close" their C by accident (ends touch), so we DO NOT require it to be open.
-  const notLine = !(len1 > 400 && turns1 < 10)
-  const notZigzag = !(len1 > 260 && (turns1 >= 12 || (strokeCount >= 2 && turns1 >= 9)))
+
+  const notLine = !(len1 > 240 && turns1 < 6)
+  const notZigzag = !(len1 > 220 && (turns1 >= 14 || (strokeCount >= 2 && turns1 >= 10)))
+
+  // Relax size/point constraints specifically for C.
+  const cBigEnough = points.length >= 6 && b1.w * b1.h >= 40 * 40
+
   const cAutoPass =
     target === 'c-curve' &&
-    bigEnough &&
+    cBigEnough &&
     notLine &&
     notZigzag &&
-    turns1 >= 4 &&
-    turns1 <= 80 &&
-    (aspect1 > 0.35 && aspect1 < 2.8)
+    turns1 >= 2 &&
+    turns1 <= 120 &&
+    (aspect1 > 0.25 && aspect1 < 3.4)
 
   if (d.guess === target || triangleAutoPass || cAutoPass) {
     setToast('✨ Spell cast!')
@@ -832,7 +840,17 @@ function cast() {
     setDragonMood('oops', 1000)
     setEnemyMood('idle', 1)
     const guessText = d.guess ? `I thought it was “${d.guess}”. ` : ''
-    setToast(guessText + helpMessage(target, d))
+
+    if (debug) {
+      const b = bbox(points)
+      const turns = turningCount(points)
+      const len = Math.round(pathLength(points))
+      const area = Math.round(b.w * b.h)
+      const closed = isClosed(points, strokeCount >= 2 ? 0.9 : 0.75)
+      setToast(`${guessText}${helpMessage(target, d)} | strokes=${strokeCount} pts=${points.length} turns=${turns} len=${len} area=${area} closed=${closed}`)
+    } else {
+      setToast(guessText + helpMessage(target, d))
+    }
   }
 }
 
@@ -848,6 +866,10 @@ canvas.addEventListener('pointermove', (e) => {
 })
 canvas.addEventListener('pointerup', () => endStroke())
 canvas.addEventListener('pointercancel', () => endStroke())
+
+debugEl.addEventListener('change', () => {
+  debug = debugEl.checked
+})
 
 undoBtn.addEventListener('click', () => {
   strokes.pop()
