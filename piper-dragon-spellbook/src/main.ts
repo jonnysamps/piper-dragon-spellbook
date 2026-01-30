@@ -790,18 +790,17 @@ function cast() {
   const aspect1 = b1.w / (b1.h || 1)
   const turns1 = turningCount(points)
   const len1 = pathLength(points)
-  const openish = !isClosed(points, strokeCount >= 2 ? 0.95 : 0.85)
+  // Note: Some kids naturally "close" their C by accident (ends touch), so we DO NOT require it to be open.
   const notLine = !(len1 > 400 && turns1 < 10)
   const notZigzag = !(len1 > 260 && (turns1 >= 12 || (strokeCount >= 2 && turns1 >= 9)))
   const cAutoPass =
     target === 'c-curve' &&
     bigEnough &&
-    openish &&
     notLine &&
     notZigzag &&
-    turns1 >= 5 &&
-    turns1 <= 60 &&
-    (aspect1 > 0.45 && aspect1 < 2.2)
+    turns1 >= 4 &&
+    turns1 <= 80 &&
+    (aspect1 > 0.35 && aspect1 < 2.8)
 
   if (d.guess === target || triangleAutoPass || cAutoPass) {
     setToast('✨ Spell cast!')
