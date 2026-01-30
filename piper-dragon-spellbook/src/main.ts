@@ -731,9 +731,21 @@ function helpMessage(target: (typeof spells)[number]['id'], d: Detection): strin
   }
 }
 
+function isCircleLike(points: Point[], strokeCount: number) {
+  const b = bbox(points)
+  const aspect = b.w / (b.h || 1)
+  const closed = isClosed(points, strokeCount >= 2 ? 0.45 : 0.32)
+  const turns = turningCount(points)
+  const circ = circularity(points)
+  const roundBbox = Math.abs(1 - aspect) < 0.55
+  const roundR = circ.ratio < 0.55
+  return closed && (roundBbox && (roundR || turns > 14))
+}
+
 function cast() {
-  const points = flatten(current ? [...strokes, current] : strokes)
-  const strokeCount = (current ? [...strokes, current] : strokes).length
+  const strokeList = current ? [...strokes, current] : strokes
+  const points = flatten(strokeList)
+  const strokeCount = strokeList.length
   const d = detect(points, strokeCount)
   const target = spells[spellIndex]!.id
 
@@ -745,7 +757,15 @@ function cast() {
   const toX = rect.width - 190
   const toY = 120
 
-  if (d.guess === target) {
+  // Super-forgiving triangle mode: accept basically any closed-ish shape that isn't circle-like.
+  const triangleAutoPass =
+    target === 'triangle' &&
+    points.length >= 12 &&
+    bbox(points).w * bbox(points).h >= 80 * 80 &&
+    isClosed(points, strokeCount >= 2 ? 0.6 : 0.5) &&
+    !isCircleLike(points, strokeCount)
+
+  if (d.guess === target || triangleAutoPass) {
     setToast('✨ Spell cast!')
     setDragonMood('happy', 1100)
     damageEnemy()
