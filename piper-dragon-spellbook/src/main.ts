@@ -757,13 +757,19 @@ function cast() {
   const toX = rect.width - 190
   const toY = 120
 
-  // Super-forgiving triangle mode: accept basically any closed-ish shape that isn't circle-like.
+  // Super-forgiving triangle mode (kid mode):
+  // - If Piper draws 3-ish strokes that form a big shape, pass.
+  // - Or if it's closed-ish and not circle-like, pass.
+  const b0 = bbox(points)
+  const bigEnough = points.length >= 12 && b0.w * b0.h >= 70 * 70
+  const closedish = isClosed(points, strokeCount >= 2 ? 0.9 : 0.75)
   const triangleAutoPass =
     target === 'triangle' &&
-    points.length >= 12 &&
-    bbox(points).w * bbox(points).h >= 80 * 80 &&
-    isClosed(points, strokeCount >= 2 ? 0.6 : 0.5) &&
-    !isCircleLike(points, strokeCount)
+    bigEnough &&
+    (
+      (strokeCount >= 3 && pathLength(points) > 220) ||
+      (closedish && !isCircleLike(points, strokeCount))
+    )
 
   if (d.guess === target || triangleAutoPass) {
     setToast('✨ Spell cast!')
