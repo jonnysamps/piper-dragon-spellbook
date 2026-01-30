@@ -802,7 +802,14 @@ function cast() {
   // In kid mode, C should basically always pass if it's not clearly a zigzag.
   const cAutoPass = target === 'c-curve' && cBigEnough && notZigzag
 
-  if (d.guess === target || triangleAutoPass || cAutoPass) {
+  // Super-forgiving S mode: if it's not a line/zigzag and it's not a closed loop, count it as S.
+  const sBigEnough = points.length >= 6 && b1.w * b1.h >= 45 * 45
+  const sNotLine = !(len1 > 240 && turns1 < 6)
+  const sNotZigzag = notZigzag
+  const sNotClosed = !isClosed(points, strokeCount >= 2 ? 0.9 : 0.75)
+  const sAutoPass = target === 's-curve' && sBigEnough && sNotLine && sNotZigzag && sNotClosed
+
+  if (d.guess === target || triangleAutoPass || cAutoPass || sAutoPass) {
     setToast('✨ Spell cast!')
     setDragonMood('happy', 1100)
     damageEnemy()
