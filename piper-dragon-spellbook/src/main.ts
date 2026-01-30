@@ -47,13 +47,20 @@ let strokes: Point[][] = []
 let current: Point[] | null = null
 let ink = inkColors[0]!
 
-type DragonMood = 'idle' | 'happy' | 'oops'
+type DragonMood = 'idle' | 'happy' | 'oops' | 'hit'
 let dragonMood: DragonMood = 'idle'
 let dragonMoodUntil = 0
+
+let enemyMood: DragonMood = 'idle'
+let enemyMoodUntil = 0
+
 let animUntil = 0
 
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string }
 let particles: Particle[] = []
+
+type Bolt = { x0: number; y0: number; x1: number; y1: number; life: number; total: number; color: string }
+let bolts: Bolt[] = []
 
 const spells = [
   { id: 'circle', label: 'circle', total: 6 },
@@ -77,6 +84,18 @@ function setDragonMood(mood: DragonMood, ms = 900) {
   dragonMood = mood
   dragonMoodUntil = performance.now() + ms
   animUntil = Math.max(animUntil, dragonMoodUntil)
+}
+
+function setEnemyMood(mood: DragonMood, ms = 900) {
+  enemyMood = mood
+  enemyMoodUntil = performance.now() + ms
+  animUntil = Math.max(animUntil, enemyMoodUntil)
+}
+
+function spawnBolt(x0: number, y0: number, x1: number, y1: number) {
+  const total = 520
+  bolts.push({ x0, y0, x1, y1, life: total, total, color: ink })
+  animUntil = Math.max(animUntil, performance.now() + total + 120)
 }
 
 function spawnBurst(x: number, y: number) {
@@ -154,6 +173,35 @@ function drawStroke(points: Point[], color: string) {
   ctx.stroke()
 }
 
+function drawBolts(dtMs: number) {
+  for (const b of bolts) b.life -= dtMs
+  bolts = bolts.filter((b) => b.life > 0)
+
+  for (const b of bolts) {
+    const p = 1 - b.life / b.total
+    // easeOut
+    const e = 1 - Math.pow(1 - p, 3)
+    const x = b.x0 + (b.x1 - b.x0) * e
+    const y = b.y0 + (b.y1 - b.y0) * e
+
+    ctx.strokeStyle = b.color
+    ctx.lineWidth = 10
+    ctx.lineCap = 'round'
+
+    ctx.beginPath()
+    ctx.moveTo(b.x0, b.y0)
+    // little jag to feel magical
+    const mx = (b.x0 + x) / 2 + Math.sin(p * 18) * 10
+    const my = (b.y0 + y) / 2 + Math.cos(p * 16) * 10
+    ctx.quadraticCurveTo(mx, my, x, y)
+    ctx.stroke()
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+    ctx.lineWidth = 18
+    ctx.stroke()
+  }
+}
+
 function drawParticles(dtMs: number) {
   const rect = canvas.getBoundingClientRect()
   const w = rect.width
@@ -188,6 +236,7 @@ function hexToRgb(hex: string) {
 
 function drawDragon(now: number) {
   const rect = canvas.getBoundingClientRect()
+  const w = rect.width
   const h = rect.height
 
   const baseX = 110
@@ -300,6 +349,93 @@ function drawDragon(now: number) {
   ctx.fillStyle = 'rgba(255,255,255,0.75)'
   ctx.font = '700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial'
   ctx.fillText('Piper\'s Dragon', 16, h - 14)
+
+  // --- Enemy dragon (right side) ---
+  const enemy = now < enemyMoodUntil ? enemyMood : 'idle'
+  const ex = w - 120 + (enemy === 'hit' ? Math.sin(t * 26) * 8 : 0)
+  const ey = 120 + (enemy === 'hit' ? Math.sin(t * 20) * 6 : Math.sin(t * 3) * 3)
+
+  ctx.save()
+  ctx.translate(ex, ey)
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  ctx.beginPath()
+  ctx.ellipse(0, 56, 56, 14, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // body
+  ctx.fillStyle = '#ff4d6d'
+  ctx.beginPath()
+  ctx.ellipse(0, 10, 58, 46, -0.06, 0, Math.PI * 2)
+  ctx.fill()
+
+  // belly
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'
+  ctx.beginPath()
+  ctx.ellipse(-8, 22, 30, 22, -0.06, 0, Math.PI * 2)
+  ctx.fill()
+
+  // head
+  ctx.fillStyle = '#ff4d6d'
+  ctx.beginPath()
+  ctx.ellipse(-34, -18, 38, 32, 0.14, 0, Math.PI * 2)
+  ctx.fill()
+
+  // horn
+  ctx.fillStyle = '#f9c74f'
+  ctx.beginPath()
+  ctx.moveTo(-52, -50)
+  ctx.lineTo(-66, -70)
+  ctx.lineTo(-70, -44)
+  ctx.closePath()
+  ctx.fill()
+
+  // eye
+  ctx.fillStyle = '#0b1026'
+  ctx.beginPath()
+  ctx.arc(-46, -22, 6, 0, Math.PI * 2)
+  ctx.fill()
+
+  // mouth
+  ctx.strokeStyle = '#0b1026'
+  ctx.lineWidth = 4
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  if (enemy === 'hit') {
+    // X mouth
+    ctx.moveTo(-62, -4)
+    ctx.lineTo(-52, 6)
+    ctx.moveTo(-52, -4)
+    ctx.lineTo(-62, 6)
+  } else {
+    ctx.arc(-58, -6, 12, 1.15 * Math.PI, 1.85 * Math.PI)
+  }
+  ctx.stroke()
+
+  // wing
+  ctx.fillStyle = '#4cc9f0'
+  ctx.beginPath()
+  ctx.moveTo(4, -8)
+  ctx.quadraticCurveTo(26, -42, 50, -12)
+  ctx.quadraticCurveTo(26, -6, 4, -8)
+  ctx.fill()
+
+  // little sparks
+  if (enemy === 'hit') {
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'
+    for (let i = 0; i < 7; i++) {
+      const sx = 60 + Math.cos(t * 8 + i) * 14
+      const sy = -26 + Math.sin(t * 8 + i) * 10
+      ctx.fillRect(sx, sy, 3, 3)
+    }
+  }
+
+  ctx.restore()
+
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  ctx.font = '700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial'
+  ctx.fillText('Grumpy Dragon', w - 140, 24)
 }
 
 function render(dtMs = 16) {
@@ -317,6 +453,7 @@ function render(dtMs = 16) {
   ctx.stroke()
 
   drawDragon(now)
+  if (bolts.length) drawBolts(dtMs)
   if (particles.length) drawParticles(dtMs)
 }
 
@@ -439,7 +576,7 @@ type Detection = {
     | 'ok'
 }
 
-function detect(points: Point[]): Detection {
+function detect(points: Point[], strokeCount: number): Detection {
   if (points.length < 12) return { guess: null, reason: 'too_few_points' }
 
   const b = bbox(points)
@@ -454,8 +591,11 @@ function detect(points: Point[]): Detection {
   // line: long and not many turns
   if (!closed && len > 400 && turns < 10) return { guess: 'line', reason: 'ok' }
 
-  // zigzag: many turns, not closed
-  if (!closed && turns >= 18) return { guess: 'zigzag', reason: 'ok' }
+  // zigzag: forgiving. Touch zigzags may be drawn with fewer sharp corners and/or multiple strokes.
+  // We treat it as zigzag if it's open, reasonably long, and has a decent number of turns.
+  // (strokeCount helps: multiple strokes usually means multiple corners.)
+  const zigzagLike = !closed && len > 260 && (turns >= 12 || (strokeCount >= 2 && turns >= 9))
+  if (zigzagLike) return { guess: 'zigzag', reason: 'ok' }
 
   // circle: closed-ish and round-ish.
   // Heuristic: near-square bbox + low radius variance OR lots of turns.
@@ -507,17 +647,24 @@ function helpMessage(target: (typeof spells)[number]['id'], d: Detection): strin
 
 function cast() {
   const points = flatten(current ? [...strokes, current] : strokes)
-  const d = detect(points)
+  const strokeCount = (current ? [...strokes, current] : strokes).length
+  const d = detect(points, strokeCount)
   const target = spells[spellIndex]!.id
 
   const rect = canvas.getBoundingClientRect()
-  const cx = rect.width / 2
-  const cy = rect.height / 2
+
+  // approximate mouths (so bolt originates/lands in a fun place)
+  const fromX = 190
+  const fromY = rect.height - 150
+  const toX = rect.width - 190
+  const toY = 120
 
   if (d.guess === target) {
     setToast('✨ Spell cast!')
     setDragonMood('happy', 1100)
-    spawnBurst(cx, cy)
+    setEnemyMood('hit', 900)
+    spawnBolt(fromX, fromY, toX, toY)
+    spawnBurst(toX, toY)
 
     successes++
     progressEl.textContent = `${successes} / ${spells.length} spells`
@@ -534,6 +681,7 @@ function cast() {
     setSpell((spellIndex + 1) % spells.length)
   } else {
     setDragonMood('oops', 1000)
+    setEnemyMood('idle', 1)
     const guessText = d.guess ? `I thought it was “${d.guess}”. ` : ''
     setToast(guessText + helpMessage(target, d))
   }
@@ -570,7 +718,7 @@ function frame(now: number) {
   const dt = Math.min(40, now - lastFrame)
   lastFrame = now
 
-  if (now < animUntil || particles.length) {
+  if (now < animUntil || particles.length || bolts.length) {
     render(dt)
   }
   requestAnimationFrame(frame)
