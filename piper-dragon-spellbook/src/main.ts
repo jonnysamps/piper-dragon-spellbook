@@ -47,12 +47,15 @@ let strokes: Point[][] = []
 let current: Point[] | null = null
 let ink = inkColors[0]!
 
-type DragonMood = 'idle' | 'happy' | 'oops' | 'hit'
+type DragonMood = 'idle' | 'happy' | 'oops' | 'hit' | 'defeated'
 let dragonMood: DragonMood = 'idle'
 let dragonMoodUntil = 0
 
 let enemyMood: DragonMood = 'idle'
 let enemyMoodUntil = 0
+
+const ENEMY_MAX_HP = 5
+let enemyHp = ENEMY_MAX_HP
 
 let animUntil = 0
 
@@ -90,6 +93,21 @@ function setEnemyMood(mood: DragonMood, ms = 900) {
   enemyMood = mood
   enemyMoodUntil = performance.now() + ms
   animUntil = Math.max(animUntil, enemyMoodUntil)
+}
+
+function damageEnemy() {
+  enemyHp = Math.max(0, enemyHp - 1)
+  if (enemyHp === 0) {
+    setEnemyMood('defeated', 1400)
+  } else {
+    setEnemyMood('hit', 900)
+  }
+  animUntil = Math.max(animUntil, performance.now() + 1200)
+}
+
+function resetEnemy() {
+  enemyHp = ENEMY_MAX_HP
+  setEnemyMood('idle', 1)
 }
 
 function spawnBolt(x0: number, y0: number, x1: number, y1: number) {
@@ -351,12 +369,15 @@ function drawDragon(now: number) {
   ctx.fillText('Piper\'s Dragon', 16, h - 14)
 
   // --- Enemy dragon (right side) ---
-  const enemy = now < enemyMoodUntil ? enemyMood : 'idle'
-  const ex = w - 120 + (enemy === 'hit' ? Math.sin(t * 26) * 8 : 0)
+  const enemy = enemyHp === 0 ? 'defeated' : now < enemyMoodUntil ? enemyMood : 'idle'
+  const hitShake = enemy === 'hit' ? Math.sin(t * 26) * 8 : 0
+  const deflate = enemy === 'defeated' ? 0.92 : 1
+  const ex = w - 120 + hitShake
   const ey = 120 + (enemy === 'hit' ? Math.sin(t * 20) * 6 : Math.sin(t * 3) * 3)
 
   ctx.save()
   ctx.translate(ex, ey)
+  ctx.scale(deflate, deflate)
 
   // shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)'
@@ -364,8 +385,11 @@ function drawDragon(now: number) {
   ctx.ellipse(0, 56, 56, 14, 0, 0, Math.PI * 2)
   ctx.fill()
 
+  const dmg = ENEMY_MAX_HP - enemyHp // 0..5
+  const baseBody = enemy === 'defeated' ? '#7b7b8c' : '#ff4d6d'
+
   // body
-  ctx.fillStyle = '#ff4d6d'
+  ctx.fillStyle = baseBody
   ctx.beginPath()
   ctx.ellipse(0, 10, 58, 46, -0.06, 0, Math.PI * 2)
   ctx.fill()
@@ -394,20 +418,37 @@ function drawDragon(now: number) {
   // eye
   ctx.fillStyle = '#0b1026'
   ctx.beginPath()
-  ctx.arc(-46, -22, 6, 0, Math.PI * 2)
-  ctx.fill()
+  if (enemy === 'defeated') {
+    // X eye
+    ctx.moveTo(-54, -28)
+    ctx.lineTo(-38, -16)
+    ctx.moveTo(-38, -28)
+    ctx.lineTo(-54, -16)
+    ctx.lineWidth = 4
+    ctx.strokeStyle = '#0b1026'
+    ctx.stroke()
+  } else {
+    ctx.arc(-46, -22, 6, 0, Math.PI * 2)
+    ctx.fill()
+    // bruised eye at higher damage
+    if (dmg >= 3) {
+      ctx.fillStyle = 'rgba(76,201,240,0.35)'
+      ctx.beginPath()
+      ctx.ellipse(-46, -18, 16, 10, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
 
   // mouth
   ctx.strokeStyle = '#0b1026'
   ctx.lineWidth = 4
   ctx.lineCap = 'round'
   ctx.beginPath()
-  if (enemy === 'hit') {
-    // X mouth
-    ctx.moveTo(-62, -4)
-    ctx.lineTo(-52, 6)
-    ctx.moveTo(-52, -4)
-    ctx.lineTo(-62, 6)
+  if (enemy === 'defeated') {
+    ctx.arc(-58, -6, 10, 0, Math.PI * 2)
+  } else if (enemy === 'hit') {
+    // shocked mouth
+    ctx.arc(-58, -6, 10, 0, Math.PI * 2)
   } else {
     ctx.arc(-58, -6, 12, 1.15 * Math.PI, 1.85 * Math.PI)
   }
@@ -421,8 +462,35 @@ function drawDragon(now: number) {
   ctx.quadraticCurveTo(26, -6, 4, -8)
   ctx.fill()
 
+  // bandage as damage increases
+  if (dmg >= 2 && enemy !== 'defeated') {
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'
+    ctx.fillRect(-18, 8, 28, 10)
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-18, 8, 28, 10)
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)'
+    ctx.beginPath()
+    ctx.moveTo(-10, 8)
+    ctx.lineTo(-10, 18)
+    ctx.moveTo(0, 8)
+    ctx.lineTo(0, 18)
+    ctx.stroke()
+  }
+
+  // cracks
+  if (dmg >= 4 && enemy !== 'defeated') {
+    ctx.strokeStyle = 'rgba(0,0,0,0.28)'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.moveTo(20, 20)
+    ctx.lineTo(30, 6)
+    ctx.lineTo(40, 18)
+    ctx.stroke()
+  }
+
   // little sparks
-  if (enemy === 'hit') {
+  if (enemy === 'hit' || enemy === 'defeated') {
     ctx.fillStyle = 'rgba(255,255,255,0.7)'
     for (let i = 0; i < 7; i++) {
       const sx = 60 + Math.cos(t * 8 + i) * 14
@@ -433,9 +501,23 @@ function drawDragon(now: number) {
 
   ctx.restore()
 
+  // HP bar
+  const barW = 140
+  const barH = 10
+  const bx = w - barW - 18
+  const by = 34
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  ctx.fillRect(bx, by, barW, barH)
+  const pct = enemyHp / ENEMY_MAX_HP
+  ctx.fillStyle = enemyHp === 0 ? 'rgba(255,255,255,0.35)' : '#90be6d'
+  ctx.fillRect(bx, by, Math.max(0, Math.floor(barW * pct)), barH)
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'
+  ctx.lineWidth = 2
+  ctx.strokeRect(bx, by, barW, barH)
+
   ctx.fillStyle = 'rgba(255,255,255,0.75)'
   ctx.font = '700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial'
-  ctx.fillText('Grumpy Dragon', w - 140, 24)
+  ctx.fillText('Grumpy Dragon', w - 162, 24)
 }
 
 function render(dtMs = 16) {
@@ -666,9 +748,15 @@ function cast() {
   if (d.guess === target) {
     setToast('✨ Spell cast!')
     setDragonMood('happy', 1100)
-    setEnemyMood('hit', 900)
+    damageEnemy()
     spawnBolt(fromX, fromY, toX, toY)
     spawnBurst(toX, toY)
+
+    if (enemyHp === 0) {
+      setToast('💥 Enemy dragon defeated!')
+      // reset after a moment so it feels like a new round
+      window.setTimeout(() => resetEnemy(), 900)
+    }
 
     successes++
     progressEl.textContent = `${successes} / ${spells.length} spells`
